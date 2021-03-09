@@ -6,7 +6,8 @@ from rest_framework_simplejwt.views import (
 from .views import (
     CreateUserView,
     UpdateUserView,
-    ChangePasswordView
+    ChangePasswordView,
+    CurrentUserLocationView
 )
 
 
@@ -15,5 +16,6 @@ urlpatterns = [
     path('login/refresh/', TokenRefreshView.as_view()),
     path('register/', CreateUserView.as_view()),
     path('change_password/<int:pk>/', ChangePasswordView.as_view()),
-    path('update_user_info/<int:pk>/', UpdateUserView.as_view())
+    path('update_user_info/<int:pk>/', UpdateUserView.as_view()),
+    path('location/', CurrentUserLocationView.as_view())
 ]

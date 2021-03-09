@@ -14,7 +14,7 @@ services:
       - db
 
   db:
-    image: postgres:12.0-alpine
+    image: postgis/postgis:12-master
     ports:
       - 32768:5432
     volumes:

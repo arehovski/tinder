@@ -1,7 +1,8 @@
+from django.contrib.gis.geos import Point
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
-from .models import User
+from .models import User, Location
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -76,3 +77,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         super().update(instance, validated_data)
 
         return instance
+
+
+class ProposalsListSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = '__all__'
