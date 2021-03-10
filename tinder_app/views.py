@@ -1,6 +1,9 @@
 import datetime
 
+from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
+from django.db.models import F
+from django.db.models.functions import Least
 from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -46,7 +49,7 @@ class CurrentUserLocationView(views.APIView):
         if user.location:
             modified = user.location.last_modified
             delta = datetime.datetime.now(tz=modified.tzinfo) - modified
-            if delta < datetime.timedelta(seconds=60):
+            if delta < datetime.timedelta(seconds=0):
                 return Response(
                     {'detail': 'Location can be changed every two hours.'},
                     status=status.HTTP_403_FORBIDDEN
@@ -73,12 +76,17 @@ class ProposalsListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.get_serializer_context()['request'].user
+        current_user_location = user.location.last_location
         proposals = User.objects.filter(
             sex=user.sex if user.homo else user.opposite_sex,
             preferred_sex=user.sex,
             age__range=(user.preferred_age_min, user.preferred_age_max),
             preferred_age_min__lte=user.age,
             preferred_age_max__gte=user.age,
-        ).exclude(
-            username=user.username
-        )
+        ).exclude(pk=user.pk)
+
+        proposals = proposals.annotate(
+            radius=Least(user.search_radius, F('search_radius')),
+            distance=Distance('location__last_location', current_user_location)
+        ).filter(distance__lte=F('radius') * 1000).order_by('distance')
+        return proposals
