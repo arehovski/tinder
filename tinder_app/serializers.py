@@ -16,7 +16,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'password', 'password_to_match', 'email', 'first_name', 'last_name')
+        fields = ('username', 'password', 'password_to_match', 'email')
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_to_match']:
@@ -29,9 +29,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             email=validated_data.get('email'),
             password=validated_data.get('password')
         )
-        user.first_name = validated_data.get('first_name', '')
-        user.last_name = validated_data.get('last_name', '')
-        user.save()
 
         return user
 
@@ -80,7 +77,11 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 
 class ProposalsListSerializer(serializers.ModelSerializer):
+    distance = serializers.FloatField(source='distance.km')
 
     class Meta:
         model = User
-        fields = '__all__'
+        fields = (
+            'id', 'username', 'first_name', 'last_name', 'description',
+            'profile_pic', 'age', 'sex', 'distance'
+        )

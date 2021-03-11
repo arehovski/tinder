@@ -4,6 +4,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.db.models import F
 from django.db.models.functions import Least
+from rest_framework.generics import get_object_or_404
 from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -77,16 +78,35 @@ class ProposalsListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.get_serializer_context()['request'].user
         current_user_location = user.location.last_location
+        user_likes = list(user.get_user_likes().values_list('id', flat=True))
+        user_dislikes = list(user.get_user_dislikes().values_list('id', flat=True))
+        related_dislikes = list(user.get_related_dislikes().values_list('id', flat=True))
+        ids_to_exclude = set(user_likes + user_dislikes + related_dislikes + [user.id])
+
         proposals = User.objects.filter(
             sex=user.sex if user.homo else user.opposite_sex,
             preferred_sex=user.sex,
             age__range=(user.preferred_age_min, user.preferred_age_max),
             preferred_age_min__lte=user.age,
             preferred_age_max__gte=user.age,
-        ).exclude(pk=user.pk)
+        ).exclude(id__in=ids_to_exclude)
 
         proposals = proposals.annotate(
             radius=Least(user.search_radius, F('search_radius')),
             distance=Distance('location__last_location', current_user_location)
         ).filter(distance__lte=F('radius') * 1000).order_by('distance')
+
         return proposals
+
+
+class SwipeView(views.APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        user = request.user
+        to_user = get_object_or_404(User.objects.all(), id=pk)
+        liked = request.POST.get('liked')
+        relation, created = user.add_relation(to_user=to_user, status=int(liked))
+        return Response({'detail': 'Relation created'}, status=status.HTTP_201_CREATED) if created \
+            else Response({'detail': 'Relation already exists'}, status=status.HTTP_204_NO_CONTENT)
+

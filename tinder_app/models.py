@@ -35,9 +35,62 @@ class User(AbstractUser):
     def opposite_sex(self):
         return 'M' if self.sex == 'F' else 'F'
 
-    def get_swipes_count(self):
-        swipes_count = {self.BASE: 20, self.VIP: 100, self.PREMIUM: float('inf')}
-        return swipes_count[self.subscription]
+    def add_relation(self, to_user, status):
+        relation, created = Relationship.objects.get_or_create(
+            from_user=self,
+            to_user=to_user,
+            defaults={'status': status}
+        )
+        return relation, created
+
+    def get_user_likes(self):
+        return self._get_user_relations(Relationship.LIKED)
+
+    def get_user_dislikes(self):
+        return self._get_user_relations(Relationship.DISLIKED)
+
+    def get_related_likes(self):
+        return self._get_related(Relationship.LIKED)
+
+    def get_related_dislikes(self):
+        return self._get_related(Relationship.DISLIKED)
+
+    def get_matched_list(self):
+        return self.relations.filter(
+            to_users__from_user=self,
+            to_users__status=Relationship.LIKED,
+            from_users__to_user=self,
+            from_users__status=Relationship.LIKED,
+        )
+
+    def get_matched(self, other):
+        return Relationship.objects.filter(
+            from_user=self,
+            to_user=other,
+            status=Relationship.LIKED
+        ).exists() and \
+        Relationship.objects.filter(
+            from_user=other,
+            to_user=self,
+            status=Relationship.LIKED
+        ).exists()
+
+    def _get_user_relations(self, status):
+        return self.relations.filter(
+            to_users__from_user=self,
+            to_users__status=status
+        )
+
+    def _get_related(self, status):
+        return self.relations.filter(
+            from_users__to_user=self,
+            from_users__status=status
+        )
+
+
+    # def get_swipes_count(self):
+    #     swipes_count = {self.BASE: 20, self.VIP: 100, self.PREMIUM: float('inf')}
+    #     return swipes_count[self.subscription]
 
     # def get_search_radius(self):
     #     radius = {self.BASE: 10, self.VIP: 25}
@@ -54,11 +107,11 @@ class Location(models.Model):
 
 
 class Relationship(models.Model):
-    BLOCKED, LIKED = 1, 2
+    DISLIKED, LIKED = range(2)
     REL_STATUSES = (
-        (BLOCKED, 'Blocked'),
-        (LIKED, 'Liked')
+        (DISLIKED, 'Disliked'),
+        (LIKED, 'Liked'),
     )
-    from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='from_user')
-    to_user = models.ForeignKey(User, models.CASCADE, related_name='to_user')
+    from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='from_users')
+    to_user = models.ForeignKey(User, models.CASCADE, related_name='to_users')
     status = models.PositiveSmallIntegerField(choices=REL_STATUSES)
