@@ -115,3 +115,18 @@ class Relationship(models.Model):
     from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='from_users')
     to_user = models.ForeignKey(User, models.CASCADE, related_name='to_users')
     status = models.PositiveSmallIntegerField(choices=REL_STATUSES)
+
+
+class Chat(models.Model):
+    participants = models.ManyToManyField(User)
+
+
+class Message(models.Model):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sender')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='receiver')
+    message = models.CharField(max_length=1000)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('timestamp',)

@@ -1,4 +1,5 @@
 import datetime
+from itertools import chain
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
@@ -50,7 +51,7 @@ class CurrentUserLocationView(views.APIView):
         if user.location:
             modified = user.location.last_modified
             delta = datetime.datetime.now(tz=modified.tzinfo) - modified
-            if delta < datetime.timedelta(seconds=0):
+            if delta < datetime.timedelta(seconds=7200):
                 return Response(
                     {'detail': 'Location can be changed every two hours.'},
                     status=status.HTTP_403_FORBIDDEN
@@ -78,10 +79,10 @@ class ProposalsListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.get_serializer_context()['request'].user
         current_user_location = user.location.last_location
-        user_likes = list(user.get_user_likes().values_list('id', flat=True))
-        user_dislikes = list(user.get_user_dislikes().values_list('id', flat=True))
-        related_dislikes = list(user.get_related_dislikes().values_list('id', flat=True))
-        ids_to_exclude = set(user_likes + user_dislikes + related_dislikes + [user.id])
+        user_likes = user.get_user_likes().values_list('id', flat=True)
+        user_dislikes = user.get_user_dislikes().values_list('id', flat=True)
+        related_dislikes = user.get_related_dislikes().values_list('id', flat=True)
+        ids_to_exclude = set(chain(user_likes, user_dislikes, related_dislikes, [user.id]))
 
         proposals = User.objects.filter(
             sex=user.sex if user.homo else user.opposite_sex,
