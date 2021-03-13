@@ -9,3 +9,4 @@ sqlparse==0.4.1
 pytest
 Pillow==8.0
 Faker
+channels

@@ -2,6 +2,10 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.gis.geos import Point
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.gis.db import models
+from django.db.models.signals import m2m_changed, post_save
+from django.dispatch import receiver
+
+from .exceptions import ParticipantsLimitException
 
 
 class User(AbstractUser):
@@ -63,7 +67,7 @@ class User(AbstractUser):
             from_users__status=Relationship.LIKED,
         )
 
-    def get_matched(self, other):
+    def is_matched(self, other):
         return Relationship.objects.filter(
             from_user=self,
             to_user=other,
@@ -113,19 +117,33 @@ class Relationship(models.Model):
         (LIKED, 'Liked'),
     )
     from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='from_users')
-    to_user = models.ForeignKey(User, models.CASCADE, related_name='to_users')
+    to_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='to_users')
     status = models.PositiveSmallIntegerField(choices=REL_STATUSES)
+
+
+@receiver(post_save, sender=Relationship)
+def create_chat_instance(sender, instance, **kwargs):
+    user1 = instance.from_user
+    user2 = instance.to_user
+    if user1.is_matched(user2):
+        chat = Chat.objects.create()
+        chat.participants.add(user1, user2)
 
 
 class Chat(models.Model):
     participants = models.ManyToManyField(User)
 
 
+@receiver(m2m_changed, sender=Chat.participants.through)
+def check_chat_participants(sender, instance, action='pre_add', **kwargs):
+    if instance.participants.count() > 2:
+        raise ParticipantsLimitException()
+
+
 class Message(models.Model):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE)
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sender')
-    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='receiver')
-    message = models.CharField(max_length=1000)
+    sender = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='sender', null=True)
+    text = models.CharField(max_length=1000)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:

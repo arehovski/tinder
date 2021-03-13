@@ -14,7 +14,7 @@ from rest_framework import generics
 from rest_framework import views
 from rest_framework import status
 
-from .models import User, Location
+from .models import User, Location, Chat
 from .serializers import (
     UserRegisterSerializer,
     UserUpdateSerializer,
@@ -106,8 +106,8 @@ class SwipeView(views.APIView):
     def post(self, request, pk):
         user = request.user
         to_user = get_object_or_404(User.objects.all(), id=pk)
-        liked = request.POST.get('liked')
-        relation, created = user.add_relation(to_user=to_user, status=int(liked))
+        is_liked = request.POST.get('is_liked')
+        relation, created = user.add_relation(to_user=to_user, status=int(is_liked))
         return Response({'detail': 'Relation created'}, status=status.HTTP_201_CREATED) if created \
             else Response({'detail': 'Relation already exists'}, status=status.HTTP_204_NO_CONTENT)
 

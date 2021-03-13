@@ -29,10 +29,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.gis',
 
-    # DRF
+    # packages
     'rest_framework',
+    'channels',
     
-    # tinder
+    # apps
     'tinder_app'
 ]
 
@@ -65,7 +66,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'tinder.wsgi.application'
-
+ASGI_APPLICATION = 'tinder.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
