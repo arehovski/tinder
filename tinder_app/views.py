@@ -6,20 +6,22 @@ from django.contrib.gis.geos import Point
 from django.db.models import F
 from django.db.models.functions import Least
 from rest_framework.generics import get_object_or_404
-from rest_framework.request import Request
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import generics
 from rest_framework import views
 from rest_framework import status
+from rest_framework import viewsets
 
-from .models import User, Location, Chat
+from .models import User, Location, Chat, Message
 from .serializers import (
     UserRegisterSerializer,
     UserUpdateSerializer,
     UserChangePasswordSerializer,
-    ProposalsListSerializer
+    UserListSerializer,
+    MessageSerializer,
+    ChatSerializer,
+    ChatUserSerializer
 )
 
 
@@ -73,7 +75,7 @@ class CurrentUserLocationView(views.APIView):
 
 
 class ProposalsListView(generics.ListAPIView):
-    serializer_class = ProposalsListSerializer
+    serializer_class = UserListSerializer
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
@@ -100,6 +102,20 @@ class ProposalsListView(generics.ListAPIView):
         return proposals
 
 
+class MatchedListView(generics.ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserListSerializer
+
+    def get_queryset(self):
+        user = self.get_serializer_context()['request'].user
+        current_user_location = user.location.last_location
+        matched_list = user.get_matched_list()
+        matched_list = matched_list.annotate(
+            distance=Distance('location__last_location', current_user_location),
+        ).order_by('distance')
+        return matched_list
+
+
 class SwipeView(views.APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -111,3 +127,30 @@ class SwipeView(views.APIView):
         return Response({'detail': 'Relation created'}, status=status.HTTP_201_CREATED) if created \
             else Response({'detail': 'Relation already exists'}, status=status.HTTP_204_NO_CONTENT)
 
+
+class ChatViewSet(viewsets.ViewSet):
+    permission_classes = (IsAuthenticated,)
+
+    def list(self, request):
+        user = request.user
+        chats = Chat.objects.filter(
+            participants=user.id,
+            message__isnull=False,
+        ) #  TODO
+        serializer = ChatSerializer(chats, many=True)
+        return Response({'data': serializer.data})
+
+    def retrieve(self, request, pk):
+        user = request.user
+        chat = get_object_or_404(Chat.objects.all(), id=pk)
+        if user not in chat.participants.all():
+            return Response(
+                {'detail': 'You dont have permissions for this chat.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        messages = Message.objects.filter(chat_id=chat.id)
+        serializer = MessageSerializer(messages, many=True)
+        return Response({'data': serializer.data})
+
+    def create(self, request, pk):
+        pass # TODO

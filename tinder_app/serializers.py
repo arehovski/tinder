@@ -2,7 +2,7 @@ from django.contrib.gis.geos import Point
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
-from .models import User, Location
+from .models import User, Location, Chat, Message
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -78,7 +78,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class ProposalsListSerializer(serializers.ModelSerializer):
+class UserListSerializer(serializers.ModelSerializer):
     distance = serializers.FloatField(source='distance.km')
 
     class Meta:
@@ -87,3 +87,35 @@ class ProposalsListSerializer(serializers.ModelSerializer):
             'id', 'username', 'first_name', 'last_name', 'description',
             'profile_pic', 'age', 'sex', 'distance'
         )
+
+
+class ChatUserSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = ('id', 'first_name', 'last_name', 'profile_pic')
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender = ChatUserSerializer(read_only=True)
+
+    class Meta:
+        model = Message
+        exclude = ('chat',)
+
+
+class ChatSerializer(serializers.ModelSerializer):
+    participants = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    # latest_message = MessageSerializer(many=True ,read_only=True)
+    latest_message = serializers.SerializerMethodField()
+
+    def get_latest_message(self, instance):
+        return MessageSerializer(
+            instance.get_latest_message(),
+            allow_null=True,
+            read_only=True
+        ).data
+
+    class Meta:
+        model = Chat
+        fields = '__all__'

@@ -79,6 +79,13 @@ class User(AbstractUser):
             status=Relationship.LIKED
         ).exists()
 
+    def get_chat_id(self, other):
+        return Chat.objects.filter(
+            participants=self.id
+        ).intersection(Chat.objects.filter(
+            participants=other.id)
+        ).first()
+
     def _get_user_relations(self, status):
         return self.relations.filter(
             to_users__from_user=self,
@@ -132,6 +139,12 @@ def create_chat_instance(sender, instance, **kwargs):
 
 class Chat(models.Model):
     participants = models.ManyToManyField(User)
+
+    def get_latest_message(self):
+        try:
+            return self.message_set.latest('timestamp')
+        except Message.DoesNotExist:
+            return None
 
 
 @receiver(m2m_changed, sender=Chat.participants.through)
