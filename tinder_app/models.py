@@ -5,7 +5,7 @@ from django.contrib.gis.db import models
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 
-from .exceptions import ParticipantsLimitException
+from tinder_app.exceptions import ParticipantsLimitException
 
 
 class User(AbstractUser):

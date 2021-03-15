@@ -9,6 +9,7 @@ from .views import (
     UpdateUserView,
     ChangePasswordView,
     CurrentUserLocationView,
+    UserDetailView,
     ProposalsListView,
     MatchedListView,
     SwipeView,
@@ -25,6 +26,7 @@ urlpatterns = router.urls + [
     path('change_password/<int:pk>/', ChangePasswordView.as_view()),
     path('update_user_info/<int:pk>/', UpdateUserView.as_view()),
     path('location/', CurrentUserLocationView.as_view()),
+    path('user/<int:pk>/', UserDetailView.as_view()),
     path('proposals/', ProposalsListView.as_view()),
     path('matched/', MatchedListView.as_view()),
     path('swipe/<int:pk>/', SwipeView.as_view())

@@ -1,8 +1,7 @@
-from django.contrib.gis.geos import Point
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
-from .models import User, Location, Chat, Message
+from tinder_app.models import User, Chat, Message
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -78,14 +77,31 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class UserListSerializer(serializers.ModelSerializer):
+class UserChatSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Chat
+        fields = ('id',)
+
+
+class UserSerializer(serializers.ModelSerializer):
     distance = serializers.FloatField(source='distance.km')
+    chat = serializers.SerializerMethodField()
+
+    def get_chat(self, instance):
+        user = self.context['request'].user
+        return UserChatSerializer(
+            user.get_chat_id(instance),
+            allow_null=True,
+            read_only=True
+        ).data
+
 
     class Meta:
         model = User
         fields = (
             'id', 'username', 'first_name', 'last_name', 'description',
-            'profile_pic', 'age', 'sex', 'distance'
+            'profile_pic', 'age', 'sex', 'distance', 'chat'
         )
 
 
@@ -104,9 +120,15 @@ class MessageSerializer(serializers.ModelSerializer):
         exclude = ('chat',)
 
 
+class MessagePostSerializer(serializers.ModelSerializer):
+    chat = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Message
+        fields = ('chat', 'text')
+
 class ChatSerializer(serializers.ModelSerializer):
     participants = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    # latest_message = MessageSerializer(many=True ,read_only=True)
     latest_message = serializers.SerializerMethodField()
 
     def get_latest_message(self, instance):

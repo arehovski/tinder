@@ -3,7 +3,7 @@ from itertools import chain
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
-from django.db.models import F
+from django.db.models import F, Max
 from django.db.models.functions import Least
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
@@ -13,15 +13,16 @@ from rest_framework import views
 from rest_framework import status
 from rest_framework import viewsets
 
-from .models import User, Location, Chat, Message
-from .serializers import (
+from tinder_app.models import User, Location, Chat, Message
+from tinder_app.exceptions import ParticipantsLimitException
+from tinder_app.serializers import (
     UserRegisterSerializer,
     UserUpdateSerializer,
     UserChangePasswordSerializer,
-    UserListSerializer,
+    UserSerializer,
     MessageSerializer,
+    MessagePostSerializer,
     ChatSerializer,
-    ChatUserSerializer
 )
 
 
@@ -75,7 +76,7 @@ class CurrentUserLocationView(views.APIView):
 
 
 class ProposalsListView(generics.ListAPIView):
-    serializer_class = UserListSerializer
+    serializer_class = UserSerializer
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
@@ -104,7 +105,7 @@ class ProposalsListView(generics.ListAPIView):
 
 class MatchedListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
-    serializer_class = UserListSerializer
+    serializer_class = UserSerializer
 
     def get_queryset(self):
         user = self.get_serializer_context()['request'].user
@@ -116,6 +117,18 @@ class MatchedListView(generics.ListAPIView):
         return matched_list
 
 
+class UserDetailView(generics.RetrieveAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        user = self.get_serializer_context()['request'].user
+        current_user_location = user.location.last_location
+        return User.objects.annotate(
+            distance=Distance('location__last_location', current_user_location),
+        ).order_by('distance')
+
+
 class SwipeView(views.APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -123,7 +136,13 @@ class SwipeView(views.APIView):
         user = request.user
         to_user = get_object_or_404(User.objects.all(), id=pk)
         is_liked = request.POST.get('is_liked')
-        relation, created = user.add_relation(to_user=to_user, status=int(is_liked))
+        try:
+            relation, created = user.add_relation(to_user=to_user, status=int(is_liked))
+        except ParticipantsLimitException:
+            return Response(
+                {'detail': 'Cannot add more than 2 users to private chat.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         return Response({'detail': 'Relation created'}, status=status.HTTP_201_CREATED) if created \
             else Response({'detail': 'Relation already exists'}, status=status.HTTP_204_NO_CONTENT)
 
@@ -135,8 +154,11 @@ class ChatViewSet(viewsets.ViewSet):
         user = request.user
         chats = Chat.objects.filter(
             participants=user.id,
-            message__isnull=False,
-        ) #  TODO
+        ).exclude(
+            message__isnull=True
+        ).annotate(
+            latest_msg_ts=Max('message__timestamp')
+        ).order_by('-latest_msg_ts')
         serializer = ChatSerializer(chats, many=True)
         return Response({'data': serializer.data})
 
@@ -152,5 +174,18 @@ class ChatViewSet(viewsets.ViewSet):
         serializer = MessageSerializer(messages, many=True)
         return Response({'data': serializer.data})
 
-    def create(self, request, pk):
-        pass # TODO
+    def create(self, request):
+        user = request.user
+        chat_id = request.data.get('chat')
+        chat = get_object_or_404(Chat.objects.all(), id=chat_id)
+        if user not in chat.participants.all():
+            return Response(
+                {'detail': 'You dont have permissions for this chat.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = MessagePostSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(sender=user, chat=chat)
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
