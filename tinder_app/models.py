@@ -8,13 +8,36 @@ from django.dispatch import receiver
 from tinder_app.exceptions import ParticipantsLimitException
 
 
-class User(AbstractUser):
+class Subscription(models.Model):
     BASE, VIP, PREMIUM = range(1, 4)
     SUB_TYPES = (
         (BASE, 'Base subscription'),
         (VIP, 'VIP subscription'),
         (PREMIUM, 'Premium subscription')
     )
+
+    sub_type = models.PositiveSmallIntegerField(choices=SUB_TYPES)
+    swipes = models.PositiveIntegerField()
+    search_radius = models.PositiveIntegerField()
+    started_at = models.DateField(auto_now_add=True)
+    terminated_at = models.DateField(null=True)
+
+    @classmethod
+    def get_default_sub(cls, user):
+        subscription, _ = cls.objects.get_or_create(
+            sub_type=cls.BASE,
+            # TODO
+        )
+
+    def save(self, *args, **kwargs):
+        swipes_count = {self.BASE: 20, self.VIP: 100, self.PREMIUM: float('inf')}
+        radius = {self.BASE: 10, self.VIP: 25, self.PREMIUM: float('inf')}
+        self.swipes = swipes_count[self.sub_type]
+        self.search_radius = radius[self.sub_type]
+        super().save(*args, **kwargs)
+
+
+class User(AbstractUser):
     SEX_CHOICES = (
         ('M', 'Male'),
         ('F', 'Female')
@@ -26,10 +49,12 @@ class User(AbstractUser):
     preferred_age_max = models.PositiveSmallIntegerField(default=150)
     description = models.CharField(max_length=2000, null=True, blank=True)
     profile_pic = models.ImageField(upload_to='avatars', null=True)
-    subscription = models.PositiveSmallIntegerField(choices=SUB_TYPES, default=BASE)
+    subscription = models.OneToOneField(
+        Subscription,
+        on_delete=models.SET_DEFAULT,
+        default=Subscription.get_default_sub)
     relations = models.ManyToManyField('self', through='Relationship', symmetrical=False)
     location = models.OneToOneField('Location', null=True, on_delete=models.CASCADE)
-    search_radius = models.PositiveSmallIntegerField(default=5)
 
     @property
     def homo(self):
@@ -46,6 +71,18 @@ class User(AbstractUser):
             defaults={'status': status}
         )
         return relation, created
+
+    def _get_user_relations(self, status):
+        return self.relations.filter(
+            to_users__from_user=self,
+            to_users__status=status
+        )
+
+    def _get_related(self, status):
+        return self.relations.filter(
+            from_users__to_user=self,
+            from_users__status=status
+        )
 
     def get_user_likes(self):
         return self._get_user_relations(Relationship.LIKED)
@@ -85,31 +122,6 @@ class User(AbstractUser):
         ).intersection(Chat.objects.filter(
             participants=other.id)
         ).first()
-
-    def _get_user_relations(self, status):
-        return self.relations.filter(
-            to_users__from_user=self,
-            to_users__status=status
-        )
-
-    def _get_related(self, status):
-        return self.relations.filter(
-            from_users__to_user=self,
-            from_users__status=status
-        )
-
-
-    # def get_swipes_count(self):
-    #     swipes_count = {self.BASE: 20, self.VIP: 100, self.PREMIUM: float('inf')}
-    #     return swipes_count[self.subscription]
-
-    # def get_search_radius(self):
-    #     radius = {self.BASE: 10, self.VIP: 25}
-    #     return radius[self.subscription]
-    #
-    # def save(self, *args, **kwargs):
-    #     self.get_search_radius()
-    #     super().save(*args, **kwargs)
 
 
 class Location(models.Model):

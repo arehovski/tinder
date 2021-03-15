@@ -66,7 +66,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('first_name', 'last_name', 'description', 'profile_pic', 'subscription')
+        fields = (
+            'first_name', 'last_name', 'description', 'profile_pic',
+            'age', 'preferred_sex', 'preferred_age_min', 'preferred_age_max',
+        )
 
     def update(self, instance, validated_data):
         user = self.context['request'].user
