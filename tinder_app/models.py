@@ -2,13 +2,13 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.gis.geos import Point
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.gis.db import models
-from django.db.models.signals import m2m_changed, post_save
+from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.dispatch import receiver
 
 from tinder_app.exceptions import ParticipantsLimitException
 
 
-class Subscription(models.Model):
+class User(AbstractUser):
     BASE, VIP, PREMIUM = range(1, 4)
     SUB_TYPES = (
         (BASE, 'Base subscription'),
@@ -16,32 +16,11 @@ class Subscription(models.Model):
         (PREMIUM, 'Premium subscription')
     )
 
-    sub_type = models.PositiveSmallIntegerField(choices=SUB_TYPES)
-    swipes = models.PositiveIntegerField()
-    search_radius = models.PositiveIntegerField()
-    started_at = models.DateField(auto_now_add=True)
-    terminated_at = models.DateField(null=True)
-
-    @classmethod
-    def get_default_sub(cls, user):
-        subscription, _ = cls.objects.get_or_create(
-            sub_type=cls.BASE,
-            # TODO
-        )
-
-    def save(self, *args, **kwargs):
-        swipes_count = {self.BASE: 20, self.VIP: 100, self.PREMIUM: float('inf')}
-        radius = {self.BASE: 10, self.VIP: 25, self.PREMIUM: float('inf')}
-        self.swipes = swipes_count[self.sub_type]
-        self.search_radius = radius[self.sub_type]
-        super().save(*args, **kwargs)
-
-
-class User(AbstractUser):
     SEX_CHOICES = (
         ('M', 'Male'),
         ('F', 'Female')
     )
+
     sex = models.CharField(max_length=1, choices=SEX_CHOICES, null=True)
     age = models.PositiveSmallIntegerField(null=True, validators=[MinValueValidator(18), MaxValueValidator(150)])
     preferred_sex = models.CharField(max_length=1, choices=SEX_CHOICES, null=True)
@@ -49,12 +28,11 @@ class User(AbstractUser):
     preferred_age_max = models.PositiveSmallIntegerField(default=150)
     description = models.CharField(max_length=2000, null=True, blank=True)
     profile_pic = models.ImageField(upload_to='avatars', null=True)
-    subscription = models.OneToOneField(
-        Subscription,
-        on_delete=models.SET_DEFAULT,
-        default=Subscription.get_default_sub)
     relations = models.ManyToManyField('self', through='Relationship', symmetrical=False)
     location = models.OneToOneField('Location', null=True, on_delete=models.CASCADE)
+    subscription = models.PositiveSmallIntegerField(choices=SUB_TYPES, default=BASE)
+    swipes_per_day = models.PositiveIntegerField(null=True)
+    search_radius = models.PositiveIntegerField(null=True)
 
     @property
     def homo(self):
@@ -122,6 +100,15 @@ class User(AbstractUser):
         ).intersection(Chat.objects.filter(
             participants=other.id)
         ).first()
+
+
+@receiver(pre_save, sender=User)
+def set_subscription_parameters(sender, instance, **kwargs):
+    if not instance.pk:
+        swipes = {sender.BASE: 20, sender.VIP: 100, sender.PREMIUM: 2147483647}
+        radius = {sender.BASE: 10, sender.VIP: 25, sender.PREMIUM: 2147483647}
+        instance.swipes_per_day = swipes.get(instance.subscription)
+        instance.search_radius = radius.get(instance.subscription)
 
 
 class Location(models.Model):

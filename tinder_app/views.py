@@ -75,6 +75,22 @@ class CurrentUserLocationView(views.APIView):
         )
 
 
+class SetRadiusView(views.APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def patch(self, request):
+        user = request.user
+        radius = int(request.data.get('radius'))
+        if user.subscription == user.PREMIUM:
+            user.search_radius = radius
+            user.save()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            {'detail': "Cannot change user search radius on VIP and Base subscription"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+
 class ProposalsListView(generics.ListAPIView):
     serializer_class = UserSerializer
     permission_classes = (IsAuthenticated,)
@@ -134,6 +150,8 @@ class SwipeView(views.APIView):
 
     def post(self, request, pk):
         user = request.user
+        if user.swipes_per_day < 1:
+            return Response({'detail': 'Out of swipes.'}, status=status.HTTP_403_FORBIDDEN)
         to_user = get_object_or_404(User.objects.all(), id=pk)
         is_liked = request.POST.get('is_liked')
         try:
@@ -143,6 +161,8 @@ class SwipeView(views.APIView):
                 {'detail': 'Cannot add more than 2 users to private chat.'},
                 status=status.HTTP_403_FORBIDDEN
             )
+        user.swipes_per_day = F('swipes_per_day') - 1
+        user.save()
         return Response({'detail': 'Relation created'}, status=status.HTTP_201_CREATED) if created \
             else Response({'detail': 'Relation already exists'}, status=status.HTTP_204_NO_CONTENT)
 
